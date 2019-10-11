@@ -18,6 +18,7 @@ package org.apache.commons.vfs2.impl.test;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.AbstractVfsTestCase;
 import org.apache.commons.vfs2.FileChangeEvent;
@@ -192,10 +193,51 @@ public class DefaultFileMonitorTests extends AbstractVfsTestCase {
         }
     }
 
+    public void testAddDirectory() throws Exception {
+        final CountingListener listener = new CountingListener();
+        final DefaultFileMonitor monitor = new DefaultFileMonitor(listener);
+        monitor.setDelay(100);
+
+        final FileObject file = fsManager.resolveFile(testFile.toURI().toString());
+        writeToFile(testFile);
+        monitor.addFile(file.getParent());
+
+        monitor.start();
+        try {
+            writeToFile(testFile);
+            Thread.sleep(1000);
+            assertTrue(testFile.setLastModified(System.currentTimeMillis()));
+            Thread.sleep(300);
+            assertEquals("Monitor retrieved file changed event", 1, listener.changed.get());
+        } finally {
+            monitor.stop();
+        }
+    }
+
     private void writeToFile(final File file) throws Exception {
         final FileWriter out = new FileWriter(file);
         out.write("string=value1");
         out.close();
+    }
+
+    private static class CountingListener implements FileListener {
+        private final AtomicLong created = new AtomicLong();
+        private final AtomicLong changed = new AtomicLong();
+
+        @Override
+        public void fileCreated(final FileChangeEvent event)  {
+            created.incrementAndGet();
+        }
+
+        @Override
+        public void fileDeleted(final FileChangeEvent event) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void fileChanged(final FileChangeEvent event) {
+            changed.incrementAndGet();
+        }
     }
 
     public class TestFileListener implements FileListener {
